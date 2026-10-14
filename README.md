@@ -38,75 +38,136 @@ C3-OPD introduces two action-level signals to calibrate these complementary sour
 
 ## 2. Method
 
-### 2.1 Trajectory-level GRPO
+C3-OPD assigns credit at three levels: trajectory outcomes, action verification, and sampled response tokens. Following the four-stage formulation, the implemented Search-QA pipeline is **Teacher verification → GRPO assignment → gated OPSD → credit fusion and policy update**.
 
-Let $i$ denote a sampled trajectory, $j$ an environment turn, and $t$ a generated response token. For a group of trajectories answering the same question, the original GRPO advantage is
+Let $i$ index a trajectory, $j$ an environment turn, and $t$ a response token belonging to turn $j$. Action-level signals operate on projected actions; token-level distillation retains the original response, including thinking.
 
-$$
-A_i=\frac{R_i-\overline R}{\operatorname{std}_{\mathrm{population}}(R)+10^{-6}}.
-$$
+### 2.1 Stage 1 — Teacher action-level verification
 
-The environment provides the binary episode reward $R_i$. C3-OPD preserves this trajectory definition and applies calibration afterward.
+#### Local correctness
 
-### 2.2 Action-only verification
+The frozen **Qwen3-VL-8B-Instruct** Teacher judges the current projected action using the question, task skills, current observation, and recent observation–action history. The action's resulting observation is withheld, and Student thinking is omitted. With Teacher logits for the single-token labels **A = Correct** and **B = Incorrect**:
 
-The frozen **Qwen3-VL-8B-Instruct** Teacher produces local correctness $c_{ij}$ and context validity $v_{ij}$ through a restricted softmax over the single-token labels **A/B**. The two prompts have different visibility:
+```math
+c_{ij}=\frac{\exp(\ell^{A,c}_{ij})}
+{\exp(\ell^{A,c}_{ij})+\exp(\ell^{B,c}_{ij})}.
+```
 
-| Signal | Visible evidence | Current action result |
-|---|---|---|
-| Local correctness $c$ | Question, projected action, recent observations/actions, task skills | Withheld |
-| Context validity $v$ | The same evidence plus the resulting observation | Included |
+#### Visible-context validity
 
-Both use the Student environment's bounded history of four preceding turns. Student thinking is omitted from verification. Thus, $v$ is a **visible-window consistency judgment**, not a claim that the entire historical prefix has been verified. Privileged inputs contain task skills; the scoring inputs do not inject the evaluation gold answers. Exact prompts are in [the Search-QA Verifier template](overlay/agent_system/prompts/c3_verifier_templates_search.json).
+A separate prompt includes the current action's resulting observation and uses **A = Valid**, **B = Invalid**:
 
-### 2.3 Token-weighted correctness calibration
+```math
+v_{ij}=\frac{\exp(\ell^{A,v}_{ij})}
+{\exp(\ell^{A,v}_{ij})+\exp(\ell^{B,v}_{ij})}.
+```
 
-Let $L_{ij}$ be the number of tokens retained by the original response mask. Define
+Both prompts use the Student environment's bounded history of four preceding turns. Thus, $v$ measures **visible-window consistency** with solving the task. Privileged inputs contain task skills; evaluation gold answers are not supplied to the Verifier. Exact prompts are in [the Search-QA Verifier template](overlay/agent_system/prompts/c3_verifier_templates_search.json).
 
-$$
-\overline c_i=\frac{\sum_jL_{ij}c_{ij}}{\sum_jL_{ij}},\qquad
-h_{ij}=\tanh\!\left(\frac{\operatorname{sign}(A_i)(c_{ij}-\overline c_i)}{\tau}\right),
-$$
+### 2.2 Stage 2 — GRPO reward assignment
 
-$$
-\overline h_i=\frac{\sum_jL_{ij}h_{ij}}{\sum_jL_{ij}},\qquad
-q_{ij}=1+\rho(h_{ij}-\overline h_i).
-$$
+#### Trajectory-level outcome credit
 
-The final experiments use **$\rho=1.0$ and $\tau=1.0$**. This construction preserves the trajectory's token-weighted mean calibration, $\sum_jL_{ij}q_{ij}/\sum_jL_{ij}=1$. The implementation checks an error tolerance of $2\times10^{-6}$ and rejects nonpositive or nonfinite actual weights. Entire question groups with identical binary rewards skip local scoring under the existing zero-GRPO-advantage rule.
+For a group of $G$ trajectories answering the same question, the environment provides binary episode rewards. The original GRPO advantage uses the population standard deviation:
 
-### 2.4 Context-gated token distillation and fusion
+```math
+\mu_R=\frac{1}{G}\sum_{k=1}^{G}R_k,\qquad
+\sigma_R=\sqrt{\frac{1}{G}\sum_{k=1}^{G}(R_k-\mu_R)^2},\qquad
+A_i=\frac{R_i-\mu_R}{\sigma_R+10^{-6}}.
+```
 
-Define the Teacher–sampled-Student log-probability gap and the previous-turn validity gate:
+C3-OPD preserves this trajectory-level definition and applies action calibration afterward.
 
-$$
-\Delta_{it}=\log p_T(y_{it})-\log p_{\mathrm{Student,sampled}}(y_{it}),\qquad
-g_{i1}=1,\quad g_{ij}=v_{i,j-1}\;(j>1).
-$$
+#### Token-weighted action calibration
 
-The fused token advantage is
+Let $L_{ij}$ count tokens retained by the original response mask. Local correctness redistributes the trajectory advantage through a bounded, sign-aware centered score:
 
-$$
+```math
+\overline c_i=\frac{\sum_j L_{ij}c_{ij}}{\sum_j L_{ij}},\qquad
+h_{ij}=\tanh\left(\frac{\mathrm{sign}(A_i)(c_{ij}-\overline c_i)}{\tau}\right).
+```
+
+```math
+\overline h_i=\frac{\sum_j L_{ij}h_{ij}}{\sum_j L_{ij}},\qquad
+q_{ij}=1+\rho(h_{ij}-\overline h_i),\qquad
+A^{\mathrm{GRPO}}_{ij}=q_{ij}A_i.
+```
+
+The final experiments use **$\rho=1.0$ and $\tau=1.0$**. Token-weighted mean calibration is preserved:
+
+```math
+\frac{\sum_j L_{ij}q_{ij}}{\sum_j L_{ij}}=1.
+```
+
+The implementation checks an error tolerance of $2\times10^{-6}$ and rejects nonpositive or nonfinite actual weights. Entire question groups with identical binary rewards skip local scoring under the existing zero-GRPO-advantage rule.
+
+### 2.3 Stage 3 — Visible-context-gated OPSD
+
+#### Token-level Teacher credit
+
+The Teacher scores the same sampled response tokens with task skills supplied as privileged information. The distillation credit is the Teacher–sampled-Student log-probability gap:
+
+```math
+\Delta_{it}=\log p_T(y_{it})-\log p_{\mathrm{Student,sampled}}(y_{it}).
+```
+
+The Teacher receives the current Student turn prompt and its bounded history plus task skills. Thinking remains in the original token-scoring and response-mask path.
+
+#### Previous-turn validity gate
+
+The preceding turn's context validity controls distillation on the current turn, with a unit first-turn gate:
+
+```math
+g_{i1}=1,\qquad g_{ij}=v_{i,j-1}\quad(j>1),\qquad
+A^{\mathrm{OPSD}}_{it}=g_{ij}\Delta_{it}.
+```
+
+An unreliable context reduces Teacher credit on the following turn. The gate remains a bounded-window approximation.
+
+### 2.4 Stage 4 — Three-level credit fusion
+
+#### Unified token advantage
+
+For token $t$ in turn $j$, combine calibrated GRPO, gated Teacher credit, and the independent invalid-action penalty:
+
+```math
 \widetilde A_{it}=
-\left[q_{ij}A_i+\lambda(s)g_{ij}\Delta_{it}-\beta\,\mathrm{invalid}_{ij}\right]M_{it},
-$$
+\left[
+A^{\mathrm{GRPO}}_{ij}
++\lambda(s)A^{\mathrm{OPSD}}_{it}
+-\beta\,\mathrm{invalid}_{ij}
+\right]M_{it}.
+```
 
-where $M_{it}$ is the original response mask, $\beta=0.1$, and
+Equivalently, the implemented C3-OPD credit is
 
-$$
+```math
+\widetilde A_{it}=
+\left[
+q_{ij}A_i+\lambda(s)g_{ij}\Delta_{it}
+-\beta\,\mathrm{invalid}_{ij}
+\right]M_{it},\qquad
+\beta=0.1.
+```
+
+Here $M_{it}$ is the original response mask. The Teacher coefficient decays across the 50 updates:
+
+```math
 \lambda(s)=0.10-0.05\min(s/50,1).
-$$
+```
 
-Thinking remains in the original token-scoring/masking path. Action parsing is restricted to content outside thinking and fails closed on malformed boundaries. The invalid-action term is applied **after fusion and before masking**; reward-level invalid penalties are disabled. There is no subsequent recentering or forced sign change of the fused advantage.
+#### Policy update and masking
+
+The fused advantage enters the existing GRPO/PPO clipped policy update. Action parsing is restricted to content outside thinking and fails closed on malformed boundaries. The invalid-action term is applied **after fusion and before masking**; reward-level invalid penalties are disabled. The fused advantage is used directly, without subsequent recentering or forced sign changes.
 
 ### 2.5 GRPO+OPSD ablation
 
 The ablation removes all Verifier local/valid scoring and sets **$q=g=1$**:
 
-$$
+```math
 \widetilde A_{it}^{\mathrm{ablation}}=
 \left[A_i+\lambda(s)\Delta_{it}-0.1\,\mathrm{invalid}_{ij}\right]M_{it}.
-$$
+```
 
 Teacher token supervision, initialization, workload, learning rate, parser, thinking, masks, retrieval, and the $\lambda/\beta$ schedules remain matched. The ablation has no measured $c/v$ signals; they are not fabricated as zeros in the figures.
 
@@ -145,17 +206,13 @@ Each question contributes one episode. Correctness is the original SearchEnv's *
 
 ### 4.1 Full-test results
 
-| Task | Questions | C3-OPD correct | C3-OPD EM | GRPO+OPSD correct | GRPO+OPSD EM |
-|---|---:|---:|---:|---:|---:|
-| nq | 3,610 | 1,138 | 31.5235% | 791 | 21.9114% |
-| triviaqa | 11,313 | 5,524 | 48.8288% | 3,301 | 29.1788% |
-| popqa | 14,267 | 5,296 | 37.1206% | 4,260 | 29.8591% |
-| hotpotqa | 7,405 | 2,053 | 27.7245% | 1,121 | 15.1384% |
-| 2wikimultihopqa | 12,576 | 3,489 | 27.7433% | 2,535 | 20.1574% |
-| musique | 2,417 | 193 | 7.9851% | 58 | 2.3997% |
-| bamboogle | 125 | 26 | 20.8000% | 23 | 18.4000% |
-| **Micro** | **51,713** | **17,719** | **34.2641%** | **12,089** | **23.3771%** |
-| **Macro** | Seven tasks | — | **28.8180%** | — | **19.5778%** |
+| Task | nq | triviaqa | popqa | hotpotqa | 2wikimultihopqa | musique | bamboogle | **Micro** | **Macro** |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Questions | 3,610 | 11,313 | 14,267 | 7,405 | 12,576 | 2,417 | 125 | **51,713** | Seven tasks |
+| C3-OPD correct | 1,138 | 5,524 | 5,296 | 2,053 | 3,489 | 193 | 26 | **17,719** | — |
+| C3-OPD EM | 31.5235% | 48.8288% | 37.1206% | 27.7245% | 27.7433% | 7.9851% | 20.8000% | **34.2641%** | **28.8180%** |
+| GRPO+OPSD correct | 791 | 3,301 | 4,260 | 1,121 | 2,535 | 58 | 23 | **12,089** | — |
+| GRPO+OPSD EM | 21.9114% | 29.1788% | 29.8591% | 15.1384% | 20.1574% | 2.3997% | 18.4000% | **23.3771%** | **19.5778%** |
 
 C3-OPD answers **5,630 more questions correctly**, an observed difference of **+10.8870 percentage points micro EM** and **+9.2402 points macro EM**. This controlled comparison removes the Verifier-derived calibration while retaining Teacher distillation. It does not establish a multi-seed effect size or statistical significance.
 
