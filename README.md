@@ -4,10 +4,10 @@
 
 This repository contains the method-specific code, configuration templates, and publication figures for two 50-update Search-QA experiments. C3-OPD couples trajectory-level GRPO with action-level correctness calibration and context-gated on-policy skill distillation. The ablation retains GRPO and Teacher token supervision while removing the Verifier and setting both calibration weights to one.
 
-| Step50 model | Correct / 51,713 | Micro EM | Seven-task macro EM |
+| model | Correct / 51,713 | Micro EM | Seven-task macro EM |
 |---|---:|---:|---:|
 | **C3-OPD** | **17,719** | **34.2641%** | **28.8180%** |
-| GRPO+OPSD, without Verifier | 12,089 | 23.3771% | 19.5778% |
+| GRPO+OPSD | 12,089 | 23.3771% | 19.5778% |
 
 Both models start from the original **Qwen3-1.7B** weights. The ablation does **not** initialize from the C3-OPD checkpoint. Results are from one run per variant; the observed differences are not a multi-seed significance claim.
 
