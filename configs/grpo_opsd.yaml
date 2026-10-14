@@ -1,0 +1,357 @@
+# Final 50-update configuration; local assets supplied through environment variables.
+data:
+  tokenizer: null
+  use_shm: false
+  train_files: ${oc.env:C3_TRAIN_PARQUET}
+  val_files: ${oc.env:C3_PROBE_PARQUET}
+  prompt_key: prompt
+  reward_fn_key: data_source
+  max_prompt_length: 4096
+  max_response_length: 1024
+  train_batch_size: 128
+  val_batch_size: 512
+  return_raw_input_ids: false
+  return_raw_chat: true
+  return_full_prompt: false
+  shuffle: true
+  filter_overlong_prompts: false
+  filter_overlong_prompts_workers: 1
+  truncation: left
+  image_key: images
+  video_key: videos
+  trust_remote_code: false
+  apply_chat_template_kwargs:
+    enable_thinking: true
+  custom_cls:
+    path: null
+    name: null
+  dataloader_num_workers: 0
+actor_rollout_ref:
+  hybrid_engine: true
+  model:
+    path: ${oc.env:C3_STUDENT_MODEL}
+    use_shm: false
+    external_lib: null
+    override_config: {}
+    enable_gradient_checkpointing: true
+    enable_activation_offload: false
+    use_remove_padding: true
+    lora_rank: 0
+    lora_alpha: 16
+    target_modules: all-linear
+    use_liger: false
+    use_fused_kernels: false
+    trust_remote_code: false
+  actor:
+    strategy: fsdp
+    ppo_mini_batch_size: 256
+    ppo_micro_batch_size: null
+    ppo_micro_batch_size_per_gpu: 4
+    use_dynamic_bsz: false
+    ppo_max_token_len_per_gpu: 16384
+    grad_clip: 1.0
+    clip_ratio: 0.2
+    clip_ratio_low: 0.2
+    clip_ratio_high: 0.2
+    clip_ratio_c: 3.0
+    loss_agg_mode: token-mean
+    entropy_coeff: 0.001
+    use_invalid_action_penalty: false
+    invalid_action_penalty_coef: 0.01
+    use_kl_loss: true
+    use_torch_compile: true
+    kl_loss_coef: 0.001
+    kl_loss_type: low_var_kl
+    ppo_epochs: 1
+    shuffle: false
+    ulysses_sequence_parallel_size: 1
+    policy_loss:
+      loss_mode: vanilla
+    checkpoint:
+      contents:
+      - model
+      - optimizer
+      - extra
+    optim:
+      lr: 1.0e-06
+      lr_warmup_steps: -1
+      lr_warmup_steps_ratio: 0.0
+      min_lr_ratio: 0.0
+      num_cycles: 0.5
+      warmup_style: constant
+      total_training_steps: -1
+      weight_decay: 0.01
+    fsdp_config:
+      wrap_policy:
+        min_num_params: 0
+      param_offload: true
+      optimizer_offload: true
+      offload_policy: false
+      reshard_after_forward: true
+      fsdp_size: -1
+      c3_replicated_student: true
+      c3_full_resume_model_path: null
+    c3_response_logits_only: true
+  ref:
+    strategy: fsdp
+    fsdp_config:
+      param_offload: true
+      reshard_after_forward: true
+      wrap_policy:
+        min_num_params: 0
+    use_torch_compile: true
+    log_prob_micro_batch_size: null
+    log_prob_micro_batch_size_per_gpu: 16
+    log_prob_use_dynamic_bsz: false
+    log_prob_max_token_len_per_gpu: 16384
+    ulysses_sequence_parallel_size: 1
+  rollout:
+    name: vllm
+    mode: sync
+    chat_scheduler: null
+    temperature: 1.0
+    top_k: -1
+    top_p: 1
+    use_fire_sampling: false
+    prompt_length: 4096
+    response_length: 1024
+    dtype: bfloat16
+    gpu_memory_utilization: 0.5
+    ignore_eos: false
+    enforce_eager: false
+    free_cache_engine: false
+    load_format: dummy_dtensor
+    layered_summon: false
+    tensor_model_parallel_size: 1
+    max_num_batched_tokens: 40960
+    max_model_len: 8192
+    max_verifier_prompt_length: null
+    max_num_seqs: 32
+    log_prob_micro_batch_size: null
+    log_prob_micro_batch_size_per_gpu: 16
+    log_prob_use_dynamic_bsz: false
+    log_prob_max_token_len_per_gpu: 16384
+    disable_log_stats: true
+    enable_chunked_prefill: true
+    do_sample: true
+    n: 1
+    engine_kwargs:
+      vllm:
+        swap_space: null
+      sglang:
+        attention_backend: null
+    val_kwargs:
+      top_k: -1
+      top_p: 1.0
+      temperature: 0.0
+      n: 1
+      do_sample: false
+      min_p: 0.0
+    multi_turn:
+      enable: false
+      max_turns: null
+      tool_config_path: null
+      format: chatml
+    max_scoring_prompt_length: 8192
+    c3_keep_eval_awake: true
+critic:
+  rollout_n: 1
+  strategy: fsdp
+  optim:
+    lr: 1.0e-05
+    lr_warmup_steps_ratio: 0.0
+    min_lr_ratio: null
+    warmup_style: constant
+    total_training_steps: -1
+    weight_decay: 0.01
+  model:
+    path: unused-for-grpo
+    use_shm: false
+    tokenizer_path: ${oc.env:C3_STUDENT_MODEL}
+    override_config: {}
+    external_lib: null
+    enable_gradient_checkpointing: true
+    enable_activation_offload: false
+    use_remove_padding: false
+    trust_remote_code: false
+    fsdp_config:
+      param_offload: false
+      optimizer_offload: false
+      offload_policy: false
+      reshard_after_forward: true
+      wrap_policy:
+        min_num_params: 0
+      fsdp_size: -1
+    lora_rank: 0
+    lora_alpha: 16
+    target_modules: all-linear
+  ppo_mini_batch_size: 256
+  ppo_micro_batch_size: null
+  ppo_micro_batch_size_per_gpu: null
+  forward_micro_batch_size: null
+  forward_micro_batch_size_per_gpu: null
+  use_dynamic_bsz: false
+  ppo_max_token_len_per_gpu: 32768
+  forward_max_token_len_per_gpu: 32768
+  ulysses_sequence_parallel_size: 1
+  ppo_epochs: 1
+  shuffle: false
+  grad_clip: 1.0
+  cliprange_value: 0.5
+  loss_agg_mode: token-mean
+  checkpoint:
+    contents:
+    - model
+    - optimizer
+    - extra
+reward_model:
+  enable: false
+  strategy: fsdp
+  model:
+    input_tokenizer: ${oc.env:C3_STUDENT_MODEL}
+    path: unused-reward-model
+    use_shm: false
+    external_lib: null
+    use_remove_padding: false
+    use_fused_kernels: false
+    trust_remote_code: false
+    fsdp_config:
+      wrap_policy:
+        min_num_params: 0
+      param_offload: false
+      reshard_after_forward: true
+      fsdp_size: -1
+  micro_batch_size: null
+  micro_batch_size_per_gpu: null
+  max_length: null
+  ulysses_sequence_parallel_size: 1
+  use_dynamic_bsz: false
+  forward_max_token_len_per_gpu: 32768
+  reward_manager: episode
+  launch_reward_fn_async: false
+  sandbox_fusion:
+    url: null
+    max_concurrent: 64
+custom_reward_function:
+  path: null
+  name: compute_score
+algorithm:
+  gamma: 1.0
+  lam: 1.0
+  adv_estimator: grpo
+  norm_adv_by_std_in_grpo: true
+  use_kl_in_reward: false
+  kl_penalty: kl
+  kl_ctrl:
+    type: fixed
+    kl_coef: 0.001
+    horizon: 10000
+    target_kl: 0.1
+  use_pf_ppo: false
+  pf_ppo:
+    reweight_method: pow
+    weight_pow: 2.0
+  gigpo:
+    step_advantage_w: 1.0
+    mode: mean_norm
+    enable_similarity: false
+    similarity_thresh: 0.95
+  filter_groups:
+    enable: false
+    max_num_gen_batches: 10
+  c3_opsd:
+    skip_equal_reward_local: true
+    q_temperature: 1.0
+    q_rho: 1.0
+    lambda_opsd: 0.1
+    lambda_floor: 0.05
+    warmdown_steps: 50
+    verifier_batch_size: 256
+    skills_dir: ${oc.env:SDAR_ROOT}/skills/search
+    skill_all: false
+    teacher_model_path: ${oc.env:C3_TEACHER_MODEL}
+    student_model_path: ${oc.env:C3_STUDENT_MODEL}
+    external_python: ${oc.env:C3_SCORER_PYTHON}
+    external_gpus: 0,1,2,3
+    verifier_templates_path: ${oc.env:SDAR_ROOT}/agent_system/prompts/c3_verifier_templates_search.json
+    external_port: 19281
+    external_request_timeout: 86400
+    external_tensor_parallel_size: 1
+    external_data_parallel_size: 4
+    external_max_model_len: 40960
+    teacher_prompt_length: 8192
+    external_enable_prefix_caching: false
+    external_local_skip_mode: whole_batch
+    external_enable_result_cache: false
+    external_result_cache_batches: 8192
+    external_teacher_batch_tokens: 4096
+    external_verifier_batch_tokens: 4096
+    external_scoring_batch_requests: 16
+    external_max_num_batched_tokens: 4096
+    external_max_num_seqs: 32
+    external_gpu_memory_utilization: 0.6
+    external_colocated: true
+    external_sleep_level: 2
+    invalid_action_beta: 0.1
+    validation_probe_path: ${oc.env:C3_PROBE_JSON}
+    validation_probe_sha256: ${oc.env:C3_PROBE_SHA256}
+    validation_probe_result_dir: ${oc.env:C3_OUTPUT}/probe_results
+    external_run_name: ${oc.env:C3_RUN_NAME}
+    verifier_enabled: false
+trainer:
+  balance_batch: true
+  total_epochs: 1
+  total_training_steps: 50
+  project_name: c3_opsd
+  experiment_name: ${oc.env:C3_RUN_NAME}
+  logger:
+  - console
+  log_val_generations: 0
+  rollout_data_dir: null
+  validation_data_dir: null
+  nnodes: 1
+  n_gpus_per_node: 4
+  save_freq: 10
+  resume_mode: disable
+  resume_from_path: null
+  val_before_train: false
+  val_only: false
+  test_freq: 10
+  critic_warmup: 0
+  default_hdfs_dir: null
+  del_local_ckpt_after_load: false
+  default_local_dir: ${oc.env:C3_CHECKPOINT_DIR}
+  max_actor_ckpt_to_keep: 5
+  max_critic_ckpt_to_keep: null
+  ray_wait_register_center_timeout: 600
+  device: cuda
+ray_init:
+  num_cpus: 16
+  include_dashboard: false
+env:
+  env_name: search
+  seed: 0
+  max_steps: 4
+  history_length: 4
+  resources_per_worker:
+    num_cpus: 0.01
+    num_gpus: 0
+  rollout:
+    n: 8
+  alfworld:
+    eval_dataset: eval_in_distribution
+  search:
+    log_requests: false
+    search_url: http://127.0.0.1:18890/retrieve
+    topk: 3
+    timeout: 60
+  sokoban:
+    dim_room:
+    - 6
+    - 6
+    num_boxes: 1
+    search_depth: 30
+    mode: tiny_rgb_array
+  webshop:
+    use_small: true
+    human_goals: false

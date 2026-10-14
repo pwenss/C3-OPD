@@ -1,0 +1,16 @@
+C3-OPD final Search-QA source release
+
+This repository distributes method-specific experimental source over the SDAR
+and verl frameworks. Original copyright and license notices in framework files
+are retained. SDAR is developed by ZJU-REAL; verl contains contributions from
+ByteDance and the wider open-source community. See LICENSE and the notices in
+individual source files.
+
+Changes for this release include C3 credit fusion, action-only verification,
+Teacher-only GRPO+OPSD ablation, four-replica execution and evaluation-residency
+support, thinking-isolated action parsing, fixed-probe evaluation, and portable
+deployment paths. Portability edits do not change the reported advantage
+equations or the final experiment's numerical settings.
+
+Datasets, model weights, checkpoints, raw traces, logs, and per-question results
+are not distributed with this repository.
