@@ -209,10 +209,8 @@ Each question contributes one episode. Correctness is the original SearchEnv's *
 | Task | nq | triviaqa | popqa | hotpotqa | 2wikimultihopqa | musique | bamboogle | **Micro** | **Macro** |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | Questions | 3,610 | 11,313 | 14,267 | 7,405 | 12,576 | 2,417 | 125 | **51,713** | Seven tasks |
-| C3-OPD correct | 1,138 | 5,524 | 5,296 | 2,053 | 3,489 | 193 | 26 | **17,719** | — |
-| C3-OPD EM | 31.5235% | 48.8288% | 37.1206% | 27.7245% | 27.7433% | 7.9851% | 20.8000% | **34.2641%** | **28.8180%** |
-| GRPO+OPSD correct | 791 | 3,301 | 4,260 | 1,121 | 2,535 | 58 | 23 | **12,089** | — |
-| GRPO+OPSD EM | 21.9114% | 29.1788% | 29.8591% | 15.1384% | 20.1574% | 2.3997% | 18.4000% | **23.3771%** | **19.5778%** |
+| C3-OPD | 31.5235% | 48.8288% | 37.1206% | 27.7245% | 27.7433% | 7.9851% | 20.8000% | **34.2641%** | **28.8180%** |
+| GRPO+OPSD | 21.9114% | 29.1788% | 29.8591% | 15.1384% | 20.1574% | 2.3997% | 18.4000% | **23.3771%** | **19.5778%** |
 
 C3-OPD answers **5,630 more questions correctly**, an observed difference of **+10.8870 percentage points micro EM** and **+9.2402 points macro EM**. This controlled comparison removes the Verifier-derived calibration while retaining Teacher distillation. It does not establish a multi-seed effect size or statistical significance.
 
