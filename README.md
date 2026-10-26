@@ -216,12 +216,6 @@ C3-OPD answers **5,630 more questions correctly**, an observed difference of **+
 
 ### 4.2 Training dynamics
 
-![Six-panel training dynamics of C3-OPD and GRPO+OPSD](figures/training_dynamics.png)
-
-**a** Training episode success. **b** Fixed 350-question greedy-probe EM. **c** Response-mask-weighted Teacher–Student log-probability gap. **d** Actor gradient norm. **e** Local correctness $c$. **f** Context validity $v$.
-
-Faint curves show the recorded per-update values; darker curves show a trailing five-update mean, using available updates at the beginning. Probe markers are the five actual evaluations. Panels e/f use valid unique turns, excluding padding duplicates; c includes only turns actually scored locally. Only C3-OPD has c/v observations. No uncertainty band is implied by these single-run traces. [Download the vector PDF](figures/training_dynamics.pdf).
-
 The training-success and held-out-probe trajectories separate later in training. The five fixed-probe correct counts are **73/91/83/93/97** for C3-OPD and **76/58/41/47/57** for GRPO+OPSD. These 350-question probes are diagnostic measurements and are not pooled with the final full-test EM.
 
 ### 4.3 Completion and result integrity
